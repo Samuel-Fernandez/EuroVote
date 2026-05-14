@@ -116,45 +116,83 @@ def submit_vote(country_id):
             return jsonify({'success': False, 'error': 'Already voted'})
     return jsonify({'success': False})
 
-@main.route('/results', methods=['GET'])
-def results():
-    # Récupère tous les votes
-    votes = get_all_votes()
-    countries = load_countries()  # Charger la liste des pays
+def calculate_eurovision_results(votes, countries, users):
+    user_votes = {}
+    voted_country_ids = set()
+    for v in votes:
+        u = v['user_id']
+        if u not in user_votes:
+            user_votes[u] = []
+        user_votes[u].append({'country_id': v['country_id'], 'vote': v['vote']})
+        voted_country_ids.add(v['country_id'])
 
-    # Dictionnaire pour stocker la somme des votes et le nombre de votes par pays
-    country_votes = {}
+    euro_points = [12, 10, 8, 7, 6, 5, 4, 3, 2, 1]
+    country_scores = {cid: 0 for cid in voted_country_ids}
+    country_details = {cid: [] for cid in voted_country_ids}
 
-    # Accumuler les votes pour chaque pays
-    for vote in votes:
-        country_id = vote['country_id']
-        vote_value = vote['vote']
+    for u, u_votes in user_votes.items():
+        score_groups = {}
+        for v in u_votes:
+            s = v['vote']
+            if s not in score_groups:
+                score_groups[s] = []
+            score_groups[s].append(v['country_id'])
 
-        if country_id not in country_votes:
-            country_votes[country_id] = {'total_votes': 0, 'vote_count': 0}
+        sorted_scores = sorted(score_groups.keys(), reverse=True)
+        current_rank = 0
+        for s in sorted_scores:
+            countries_in_tie = score_groups[s]
+            num_tied = len(countries_in_tie)
+            total_points = 0
+            for i in range(num_tied):
+                rank_index = current_rank + i
+                if rank_index < len(euro_points):
+                    total_points += euro_points[rank_index]
+            
+            points_per_country = total_points / num_tied
+            for c in countries_in_tie:
+                country_scores[c] += points_per_country
+                country_details[c].append({
+                    'user_id': u,
+                    'vote': s,
+                    'points': points_per_country
+                })
+                
+            current_rank += num_tied
 
-        country_votes[country_id]['total_votes'] += vote_value
-        country_votes[country_id]['vote_count'] += 1
+    user_dict = {u['id']: u['name'] for u in users}
 
-    # Calculer la moyenne des votes pour chaque pays et ajouter le nom du pays
     country_results = []
-    for country_id, data in country_votes.items():
-        average_vote = data['total_votes'] / data['vote_count']
-        average_vote = round(average_vote * 4) / 4  # Arrondi à 0.25
+    for cid in voted_country_ids:
+        country = next((c for c in countries if c['id'] == cid), None)
+        country_name = country['name'] if country else f"Pays inconnu (ID: {cid})"
         
-        # Trouver le pays correspondant
-        country = next((c for c in countries if c['id'] == country_id), None)
-        country_name = country['name'] if country else f"Pays inconnu (ID: {country_id})"
+        details = []
+        for d in country_details[cid]:
+            uname = user_dict.get(d['user_id'], "Inconnu")
+            details.append({
+                'user_name': uname,
+                'vote': d['vote'],
+                'points': d['points']
+            })
+        details.sort(key=lambda x: x['points'], reverse=True)
         
         country_results.append({
-            'country_id': country_id,
+            'country_id': cid,
             'country_name': country_name,
-            'average_vote': average_vote
+            'score': country_scores[cid],
+            'details': details
         })
 
-    # Trier les pays par la moyenne des votes (du plus élevé au plus bas)
-    country_results.sort(key=lambda x: x['average_vote'], reverse=True)
+    country_results.sort(key=lambda x: x['score'], reverse=True)
+    return country_results
 
+@main.route('/results', methods=['GET'])
+def results():
+    votes = get_all_votes()
+    countries = load_countries()
+    users = load_users()
+    country_results = calculate_eurovision_results(votes, countries, users)
     return render_template('results.html', country_results=country_results)
 
 # Ajouter un before_request pour mettre à jour l'activité des utilisateurs
@@ -185,6 +223,15 @@ def logout():
         del active_users[user_id]
     session.clear()
     return redirect(url_for('main.profile'))
+
+# Ajouter une nouvelle route pour obtenir les résultats en direct (JSON)
+@main.route('/api/results')
+def api_results():
+    votes = get_all_votes()
+    countries = load_countries()
+    users = load_users()
+    country_results = calculate_eurovision_results(votes, countries, users)
+    return jsonify(country_results)
 
 # Ajouter une nouvelle route pour obtenir les utilisateurs actifs
 @main.route('/get_active_users')

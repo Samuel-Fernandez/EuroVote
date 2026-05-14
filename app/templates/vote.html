@@ -2,23 +2,23 @@
 
 {% block content %}
     <div class="vote-container">
-        <h2 class="page-title">Country Vote</h2>
+        <h2 class="page-title">Vote pour le pays</h2>
 
         <div class="country-info">
             <div class="country-flag-container">
                 <img src="{{ url_for('static', filename='countries_flag/' ~ country_id ~ '.png') }}"
-                    alt="Country Flag" class="vote-country-flag">
+                    alt="Drapeau du pays" class="vote-country-flag">
                 <h3 class="country-name">{{ country_name }}</h3>
             </div>
         </div>
 
         {% if vote %}
             <div class="vote-result">
-                <div class="vote-score-container">
-                    <span class="vote-score">{{ vote.vote }}</span>
-                    <span class="vote-max">/20</span>
+                <div class="vote-score-container" style="text-align: center; margin-top: 20px;">
+                    <span class="vote-score" style="font-size: 36px; font-weight: bold; color: var(--primary-color);">{{ vote.vote }}</span>
+                    <span class="vote-max" style="font-size: 24px; color: var(--text-muted);">/20</span>
                 </div>
-                <p class="vote-status">You have already voted</p>
+                <p class="vote-status" style="text-align: center; margin-top: 10px; color: var(--success-color);">Vous avez déjà voté</p>
             </div>
         {% else %}
             <div class="vote-control">
@@ -29,12 +29,12 @@
                 
 
                 <button id="vote_button">
-                    <i class="fas fa-check"></i> Submit Vote
+                    <i class="fas fa-check"></i> Valider le vote
                 </button>
 
-                <p class="vote-warning">
+                <p class="vote-warning" style="margin-top: 15px; font-size: 14px; color: var(--warning-color);">
                     <i class="fas fa-exclamation-triangle"></i>
-                    Your vote is irreversible!
+                    Votre vote est définitif !
                 </p>
             </div>
         {% endif %}
@@ -57,11 +57,11 @@
 
         document.getElementById('vote_button').addEventListener('click', function() {
             // Confirm before submitting
-            if (confirm('Are you sure? Your vote cannot be changed later.')) {
+            if (confirm('Êtes-vous sûr ? Votre vote est définitif.')) {
                 const voteValue = slider.value;
                 
                 // Show loading state
-                this.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Submitting...';
+                this.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Envoi...';
                 this.disabled = true;
                 
                 fetch("{{ url_for('main.submit_vote', country_id=country_id) }}", {
@@ -74,29 +74,18 @@
                 .then(response => response.json())
                 .then(data => {
                     if (data.success) {
-                        // Show success animation before reload
-                        const container = document.querySelector('.vote-control');
-                        container.innerHTML = `
-                            <div class="vote-success">
-                                <i class="fas fa-check-circle"></i>
-                                <p>Vote submitted successfully!</p>
-                            </div>
-                        `;
-                        
-                        setTimeout(() => {
-                            location.reload();
-                        }, 1500);
+                        window.location.href = '/?vote_success=1';
                     } else {
-                        alert('You have already voted.');
-                        location.reload();
+                        alert("Vous avez déjà voté.");
+                        window.location.href = '/';
                     }
                 })
                 .catch(error => {
                     console.error('Error:', error);
-                    alert('Error submitting vote');
+                    alert("Erreur lors de l'envoi du vote");
                     
                     // Reset button
-                    this.innerHTML = '<i class="fas fa-check"></i> Submit Vote';
+                    this.innerHTML = '<i class="fas fa-check"></i> Valider le vote';
                     this.disabled = false;
                 });
             }

@@ -16,10 +16,6 @@
         "name": "Sofia"
     },
     {
-        "id": 5,
-        "name": "Eyobe"
-    },
-    {
         "id": 6,
         "name": "Emilie"
     },
@@ -29,10 +25,6 @@
     },
     {
         "id": 8,
-        "name": "Dylan"
-    },
-    {
-        "id": 9,
-        "name": "Isma"
+        "name": "Joshua"
     }
 ]

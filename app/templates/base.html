@@ -27,5 +27,55 @@
     <footer>
         <p>&copy; 2025 Eurovote</p>
     </footer>
+
+    <!-- Global Vote Details Modal -->
+    <div id="voteDetailsModal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal" onclick="closeVoteDetails()">&times;</span>
+            <h3 id="modalCountryName" class="modal-title">Détails des votes</h3>
+            <div id="modalVotesList" class="votes-list"></div>
+        </div>
+    </div>
+    
+    <script>
+        window.showVoteDetails = function(details, countryName) {
+            document.getElementById('modalCountryName').textContent = "Votes pour " + countryName;
+            const list = document.getElementById('modalVotesList');
+            list.innerHTML = '';
+            
+            if (details && details.length > 0) {
+                details.forEach(d => {
+                    list.innerHTML += `
+                        <div class="vote-detail-item">
+                            <span class="voter-name"><i class="fas fa-user"></i> ${d.user_name}</span>
+                            <span class="voter-score">${d.points.toFixed(1)} pts <small style="opacity:0.6; font-weight:normal;">(Note: ${d.vote}/20)</small></span>
+                        </div>
+                    `;
+                });
+            } else {
+                list.innerHTML = '<p class="no-details">Aucun détail disponible.</p>';
+            }
+            
+            document.getElementById('voteDetailsModal').style.display = 'flex';
+            setTimeout(() => {
+                document.getElementById('voteDetailsModal').classList.add('show');
+            }, 10);
+        };
+        
+        window.closeVoteDetails = function() {
+            const modal = document.getElementById('voteDetailsModal');
+            modal.classList.remove('show');
+            setTimeout(() => {
+                modal.style.display = 'none';
+            }, 300);
+        };
+        
+        window.addEventListener('click', function(event) {
+            const modal = document.getElementById('voteDetailsModal');
+            if (event.target == modal) {
+                closeVoteDetails();
+            }
+        });
+    </script>
 </body>
 </html>

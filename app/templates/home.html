@@ -26,23 +26,26 @@
         </form>        
         {% endif %}
 
-        <div class="profiles-container" id="profiles-container">
-            <div class="profile-card">
+        <div class="profiles-container" id="profiles-container" style="display: flex; justify-content: center;">
+            <div class="profile-card" style="width: 100%; max-width: 400px;">
                 <a href="{{ url_for('main.vote', country_id=current_voting_country.id) if current_voting_country else '#' }}" id="vote-card">
                     {% if current_voting_country %}
-                        <h3>Vote for {{ current_voting_country.name }}</h3>
+                        <h3>Voter pour {{ current_voting_country.name }}</h3>
                         <!-- Retirer le conteneur autour de l'image et afficher directement l'image -->
                         <img src="{{ url_for('static', filename='countries_flag/' ~ current_voting_country.id ~ '.png') }}" alt="{{ current_voting_country.name }}">
                     {% else %}
-                        <h3>No country currently being voted</h3>
+                        <h3>Aucun vote en cours</h3>
                     {% endif %}
                 </a>
             </div>
-            
-            <div class="profile-card">
-                <a href="{{ url_for('main.results') }}">
-                    <h3><i class="fas fa-trophy"></i> View Rankings</h3>
-                </a>
+        </div>
+
+        <div class="histogram-section" style="margin-top: 40px;">
+            <h3 class="section-title" style="text-align: center; color: var(--text-main); font-size: 24px; margin-bottom: 20px;">
+                <i class="fas fa-chart-bar" style="color: var(--primary-color);"></i> Classement en Direct
+            </h3>
+            <div class="live-histogram" id="live-histogram">
+                <!-- Les barres seront générées ici par JS -->
             </div>
         </div>
     </div>
@@ -128,6 +131,13 @@
         }
     
         window.addEventListener('load', () => {
+            // Check for vote_success parameter
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.get('vote_success') === '1') {
+                showNotification('Votre vote a bien été pris en compte !', 'success');
+                window.history.replaceState({}, document.title, window.location.pathname);
+            }
+
             const form = document.getElementById('set_country_form');
             const select = document.getElementById('country_select');
     
@@ -159,8 +169,124 @@
                 });
             }
     
+            // FLIP animation logic and histogram fetch
+            async function fetchHistogram() {
+                try {
+                    const res = await fetch('/api/results');
+                    if (!res.ok) return;
+                    const data = await res.json();
+                    
+                    const container = document.getElementById('live-histogram');
+                    
+                    // FLIP: 1. FIRST (Record current positions)
+                    const bars = Array.from(container.children);
+                    const firstPositions = {};
+                    bars.forEach(bar => {
+                        const id = bar.dataset.id;
+                        firstPositions[id] = bar.getBoundingClientRect();
+                    });
+                    
+                    // Update DOM elements & height
+                    data.forEach((country, index) => {
+                        let bar = document.getElementById(`bar-${country.country_id}`);
+                        if (!bar) {
+                            bar = document.createElement('div');
+                            bar.id = `bar-${country.country_id}`;
+                            bar.dataset.id = country.country_id;
+                            bar.className = 'histogram-bar-container';
+                            bar.innerHTML = `
+                                <div class="bar-score">${country.score.toFixed(1)} pts</div>
+                                <div class="bar-track">
+                                    <div class="bar-fill"></div>
+                                </div>
+                                <img class="bar-flag" src="/static/countries_flag/${country.country_id}.png" alt="${country.country_name}">
+                                <div class="bar-name">${country.country_name}</div>
+                                <div class="bar-rank"></div>
+                            `;
+                            container.appendChild(bar);
+                            
+                            // Add click listener on flag for details
+                            const flagImg = bar.querySelector('.bar-flag');
+                            flagImg.style.cursor = 'pointer';
+                            flagImg.addEventListener('click', () => {
+                                const details = JSON.parse(bar.dataset.details || '[]');
+                                showVoteDetails(details, bar.dataset.countryName);
+                            });
+                        }
+                        
+                        // Update latest details data on element
+                        bar.dataset.details = JSON.stringify(country.details || []);
+                        bar.dataset.countryName = country.country_name;
+                        
+                        // Update content if changed
+                        bar.querySelector('.bar-score').textContent = country.score.toFixed(1) + ' pts';
+                        
+                        // Update height (Max score is dynamic based on top country)
+                        const maxScore = Math.max(12, data.length > 0 ? data[0].score : 12);
+                        const heightPercent = Math.max(2, (country.score / maxScore) * 100);
+                        bar.querySelector('.bar-fill').style.height = `${heightPercent}%`;
+                        
+                        // Change DOM order based on index
+                        bar.style.order = index;
+
+                        // Update rank display
+                        const rank = index + 1;
+                        const rankDiv = bar.querySelector('.bar-rank');
+                        rankDiv.textContent = rank;
+                        
+                        // Apply styling for top 3
+                        rankDiv.className = 'bar-rank'; // reset
+                        if (rank === 1) rankDiv.classList.add('rank-gold');
+                        else if (rank === 2) rankDiv.classList.add('rank-silver');
+                        else if (rank === 3) rankDiv.classList.add('rank-bronze');
+                        else rankDiv.classList.add('rank-normal');
+                    });
+                    
+                    // FLIP: 2. LAST (Record new positions after DOM update)
+                    requestAnimationFrame(() => {
+                        const lastPositions = {};
+                        const currentBars = Array.from(container.children);
+                        currentBars.forEach(bar => {
+                            lastPositions[bar.dataset.id] = bar.getBoundingClientRect();
+                        });
+                        
+                        // FLIP: 3. INVERT and 4. PLAY
+                        currentBars.forEach(bar => {
+                            const id = bar.dataset.id;
+                            const first = firstPositions[id];
+                            const last = lastPositions[id];
+                            
+                            if (first && last) {
+                                const deltaX = first.left - last.left;
+                                // Only animate if position changed
+                                if (deltaX !== 0) {
+                                    // Invert
+                                    bar.style.transform = `translateX(${deltaX}px)`;
+                                    bar.style.transition = 'transform 0s';
+                                    
+                                    // Play
+                                    requestAnimationFrame(() => {
+                                        bar.style.transform = '';
+                                        bar.style.transition = 'transform 0.5s cubic-bezier(0.4, 0, 0.2, 1)';
+                                    });
+                                }
+                            }
+                        });
+                    });
+                    
+                } catch (err) {
+                    console.error('Error fetching histogram:', err);
+                }
+            }
+
+            // Initial fetch
+            fetchHistogram();
+
             // Start polling
-            setInterval(checkForUpdates, 5000);
+            setInterval(() => {
+                checkForUpdates();
+                fetchHistogram();
+            }, 3000);
         });
     </script>
 {% endblock %}
